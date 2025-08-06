@@ -240,7 +240,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
     ctx.stroke();
     animationFrameRef.current = requestAnimationFrame(draw);
-    console.log("hi");
+    // console.log("hi");
   };
 
   return (
