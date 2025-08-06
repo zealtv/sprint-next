@@ -1,4 +1,4 @@
     [Desktop Entry]
     Type=Application
     Name=Kiosk App
-    Exec=/home/sonic/sprint-next/start.sh
+    Exec=/home/sonic/Desktop/sprint-next/start.sh
