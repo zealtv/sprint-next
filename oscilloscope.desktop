@@ -1,4 +1,4 @@
     [Desktop Entry]
     Type=Application
-    Name=Kiosk App
+    Name=Oscilloscope
     Exec=/home/sonic/Desktop/sprint-next/start.sh
