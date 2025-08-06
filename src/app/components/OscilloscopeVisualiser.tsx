@@ -39,6 +39,8 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
     { x: number; y: number; vx: number; vy: number; opacity: number }[]
   >([]);
   const lastAmplitudeRef = useRef<number>(0);
+    // lastSmoothedMagnitudeRef will store the smoothed amplitude (0-1 range)
+  const lastSmoothedMagnitudeRef = useRef<number>(0);
 
   // Configuration
   const timeWindow = 0.05; // Seconds of audio to display
@@ -66,8 +68,10 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 2048;
+        analyser.channelCount = 1;
+        analyser.smoothingTimeConstant = 1;
         source.connect(analyser);
-
+        
         analyserRef.current = analyser;
         dataArrayRef.current = new Float32Array(analyser.frequencyBinCount);
 
@@ -102,16 +106,29 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
   }, [colorChangeInterval, colors]);
 
   const draw = () => {
-    if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current) return;
+    if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current ) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d')!;
     const analyser = analyserRef.current;
     const dataArray = dataArrayRef.current;
+    // const sampleRate = audioContext.sampleRate; // Get the audio context's sample rate
+    const sampleRate = 41000;
+
 
     // Set canvas size
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
+    // Calculate attack and decay coefficients based on props and sample rate
+    // These coefficients determine the responsiveness of the envelope follower
+    // A smaller time (e.g., 0.15s attack) results in a coefficient closer to 0,
+    // making the smoothed value respond quickly to increases.
+    // A larger time (e.g., 0.25s decay) results in a coefficient closer to 1,
+    // making the smoothed value decay slowly.
+    const attackCoeff = Math.exp(-1 / (sampleRate * attack));
+    const decayCoeff = Math.exp(-1 / (sampleRate * decay));
+
 
     // Calculate RMS amplitude for sparkle reactiveness
     analyser.getFloatTimeDomainData(dataArray);
@@ -172,7 +189,27 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
     for (let i = 0; i < dataArray.length; i++) {
 
-      const rawAmplitude = dataArray[i];
+      const rawSample = dataArray[i]; // Raw audio sample, ranges from -1.0 to 1.0
+      const rawMagnitude = Math.abs(rawSample); // Get the absolute magnitude (0.0 to 1.0)
+      let currentSmoothedMagnitude = lastSmoothedMagnitudeRef.current;
+
+      // --- Custom Envelope Follower Logic ---
+      if (rawMagnitude > currentSmoothedMagnitude) {
+        // Attack phase: signal is increasing, use attack coefficient for faster response
+        currentSmoothedMagnitude = rawMagnitude * (1 - attackCoeff) + currentSmoothedMagnitude * attackCoeff;
+      } else {
+        // Decay phase: signal is decreasing, use decay coefficient for slower fade
+        currentSmoothedMagnitude = rawMagnitude * (1 - decayCoeff) + currentSmoothedMagnitude * decayCoeff;
+      }
+
+      // Clamp the smoothed magnitude to ensure it stays within a valid range (0 to 1)
+      currentSmoothedMagnitude = Math.min(1.0, Math.max(0.0, currentSmoothedMagnitude));
+
+      // Store the smoothed magnitude for the next iteration
+      lastSmoothedMagnitudeRef.current = currentSmoothedMagnitude;
+
+
+      // const rawAmplitude = dataArray[i];
       // Apply attack and decay to amplitude
       // const smoothedAmplitude = lastAmplitudeRef.current + 
 
@@ -180,16 +217,17 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
       //   (Math.abs(rawAmplitude) > Math.abs(lastAmplitudeRef.current) ? attack : decay);
 
-      const smoothedAmplitude = 
-        (Math.abs(rawAmplitude) > Math.abs(lastAmplitudeRef.current) ?
-          rawAmplitude 
-        :
-          lastAmplitudeRef.current * 0.9
-        );
+      // const smoothedAmplitude = rawAmplitude;
+        // (Math.abs(rawAmplitude) > Math.abs(lastAmplitudeRef.current) ?
+        //   rawAmplitude 
+        // :
+        //   lastAmplitudeRef.current * 0.9
+        // );
 
-      lastAmplitudeRef.current = smoothedAmplitude;
+      // lastAmplitudeRef.current = smoothedAmplitude;
 
-      const amplitude = smoothedAmplitude * gain;
+      const amplitude = rawSample * currentSmoothedMagnitude * gain;
+      // const amplitude = rawSample * gain;
       const y = centerY - amplitude * (canvas.height / 2);
       const x = i * sliceWidth;
 
@@ -202,6 +240,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
     ctx.stroke();
     animationFrameRef.current = requestAnimationFrame(draw);
+    console.log("hi");
   };
 
   return (
