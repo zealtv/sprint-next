@@ -38,6 +38,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
   const sparklesRef = useRef<
     { x: number; y: number; vx: number; vy: number; opacity: number }[]
   >([]);
+  const lastAmplitudeRef = useRef<number>(0);
 
   // Configuration
   const timeWindow = 0.05; // Seconds of audio to display
@@ -128,8 +129,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
       const index = Math.floor(Math.random() * dataArray.length);
       const amplitude = dataArray[index] * gain;
       const x = (index / dataArray.length) * canvas.width;
-    //   const y = canvas.height / 2 - amplitude * (canvas.height / 2);
-        const y = canvas.height / 2;// - amplitude * (canvas.height / 2);
+      const y = canvas.height / 2;
       const direction = Math.random() < 0.5 ? -1 : 1;
       sparklesRef.current.push({
         x: x + (Math.random() - 0.5) * sparkleSpread,
@@ -158,10 +158,6 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
       ctx.fillStyle = `${sparkleColor}${Math.floor(sparkle.opacity * 255).toString(16).padStart(2, '0')}`;
       ctx.globalCompositeOperation = 'source-over';
       ctx.fill();
-    //   ctx.fillStyle = `${sparkleTint}${Math.floor(sparkle.opacity * 64).toString(16).padStart(2, '0')}`;
-    //   ctx.globalCompositeOperation = 'lighter';
-    //   ctx.fill();
-    //   ctx.globalCompositeOperation = 'source-over';
     });
 
     // Draw oscilloscope line
@@ -172,23 +168,36 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
     ctx.lineJoin = 'round';
 
     const sliceWidth = canvas.width / dataArray.length;
-    let lastY = canvas.height / 2;
     const centerY = canvas.height / 2;
 
     for (let i = 0; i < dataArray.length; i++) {
-      const amplitude = dataArray[i] * gain;
-      const y = centerY - amplitude * (canvas.height / 2);
 
-      // Apply attack and decay
-      const smoothedY = lastY + (y - lastY) * (y > lastY ? attack : decay);
+      const rawAmplitude = dataArray[i];
+      // Apply attack and decay to amplitude
+      // const smoothedAmplitude = lastAmplitudeRef.current + 
+
+      //   (rawAmplitude - lastAmplitudeRef.current) * 
+
+      //   (Math.abs(rawAmplitude) > Math.abs(lastAmplitudeRef.current) ? attack : decay);
+
+      const smoothedAmplitude = 
+        (Math.abs(rawAmplitude) > Math.abs(lastAmplitudeRef.current) ?
+          rawAmplitude 
+        :
+          lastAmplitudeRef.current * 0.9
+        );
+
+      lastAmplitudeRef.current = smoothedAmplitude;
+
+      const amplitude = smoothedAmplitude * gain;
+      const y = centerY - amplitude * (canvas.height / 2);
       const x = i * sliceWidth;
 
       if (i === 0) {
-        ctx.moveTo(x, smoothedY);
+        ctx.moveTo(x, y);
       } else {
-        ctx.lineTo(x, smoothedY);
+        ctx.lineTo(x, y);
       }
-      lastY = smoothedY;
     }
 
     ctx.stroke();
