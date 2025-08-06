@@ -58,6 +58,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
     };
     goFullscreen();
 
+
     // Initialize audio
     const initAudio = async () => {
       try {
@@ -242,6 +243,9 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
     animationFrameRef.current = requestAnimationFrame(draw);
     // console.log("hi");
   };
+
+
+
 
   return (
     <div className="fixed inset-0 bg-black">
