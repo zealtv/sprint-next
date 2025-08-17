@@ -2,6 +2,21 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
+// Helper function for color interpolation
+const interpolateColor = (color1: string, color2: string, factor: number) => {
+  if (factor < 0) factor = 0;
+  if (factor > 1) factor = 1;
+
+  const c1 = { r: parseInt(color1.substring(1, 3), 16), g: parseInt(color1.substring(3, 5), 16), b: parseInt(color1.substring(5, 7), 16) };
+  const c2 = { r: parseInt(color2.substring(1, 3), 16), g: parseInt(color2.substring(3, 5), 16), b: parseInt(color2.substring(5, 7), 16) };
+
+  const r = Math.round(c1.r + factor * (c2.r - c1.r));
+  const g = Math.round(c1.g + factor * (c2.g - c1.g));
+  const b = Math.round(c1.b + factor * (c2.b - c1.b));
+
+  return `rgb(${r},${g},${b})`;
+};
+
 interface OscilloscopeVisualizerProps {
   lineThickness?: number;
   gain?: number;
@@ -14,6 +29,7 @@ interface OscilloscopeVisualizerProps {
   sparkleReactiveness?: number;
   sparkleVelocity?: number;
   sparkleSpread?: number;
+  timeWindow?: number;
 }
 
 const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
@@ -28,6 +44,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
   sparkleReactiveness = 0.8,
   sparkleVelocity = 5,
   sparkleSpread = 20,
+  timeWindow = 0.8,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -35,15 +52,13 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
   const dataArrayRef = useRef<Float32Array | null>(null);
   const animationFrameRef = useRef<number>(0);
   const colorIndexRef = useRef<number>(0);
+  const transitionStartTimeRef = useRef<number | null>(null);
   const sparklesRef = useRef<
     { x: number; y: number; vx: number; vy: number; opacity: number }[]
   >([]);
   const lastAmplitudeRef = useRef<number>(0);
     // lastSmoothedMagnitudeRef will store the smoothed amplitude (0-1 range)
   const lastSmoothedMagnitudeRef = useRef<number>(0);
-
-  // Configuration
-  const timeWindow = 0.05; // Seconds of audio to display
 
   useEffect(() => {
     // Attempt fullscreen on mount
@@ -68,13 +83,19 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = 2048;
+        
+        const sampleRate = ctx.sampleRate;
+        const desiredSamples = timeWindow * sampleRate;
+        let fftSize = Math.pow(2, Math.ceil(Math.log2(desiredSamples)));
+        fftSize = Math.max(32, Math.min(32768, fftSize));
+
+        analyser.fftSize = fftSize;
         analyser.channelCount = 1;
         analyser.smoothingTimeConstant = 1;
         source.connect(analyser);
         
         analyserRef.current = analyser;
-        dataArrayRef.current = new Float32Array(analyser.frequencyBinCount);
+        dataArrayRef.current = new Float32Array(analyser.fftSize);
 
         // Start visualization
         draw();
@@ -95,16 +116,16 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
       if (audioContext) audioContext.close();
       cancelAnimationFrame(animationFrameRef.current);
     };
-  }, []);
+  }, [timeWindow]);
 
   // Color cycling
   useEffect(() => {
     const changeColor = () => {
-      colorIndexRef.current = (colorIndexRef.current + 1) % colors.length;
+      transitionStartTimeRef.current = performance.now();
     };
     const interval = setInterval(changeColor, colorChangeInterval);
     return () => clearInterval(interval);
-  }, [colorChangeInterval, colors]);
+  }, [colorChangeInterval]);
 
   const draw = () => {
     if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current ) return;
@@ -132,7 +153,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
 
 
     // Calculate RMS amplitude for sparkle reactiveness
-    analyser.getFloatTimeDomainData(dataArray);
+    analyser.getFloatTimeDomainData(dataArray as any);
     const rms = Math.sqrt(
       dataArray.reduce((sum, val) => sum + val * val, 0) / dataArray.length
     );
@@ -181,7 +202,23 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
     // Draw oscilloscope line
     ctx.beginPath();
     ctx.lineWidth = lineThickness;
-    ctx.strokeStyle = colors[colorIndexRef.current];
+    
+    // Color transition logic
+    const transitionDuration = 2000; // 2 seconds
+    let strokeColor = colors[colorIndexRef.current];
+    if (transitionStartTimeRef.current) {
+      const elapsedTime = performance.now() - transitionStartTimeRef.current;
+      const progress = Math.min(elapsedTime / transitionDuration, 1);
+
+      const nextColorIndex = (colorIndexRef.current + 1) % colors.length;
+      strokeColor = interpolateColor(colors[colorIndexRef.current], colors[nextColorIndex], progress);
+
+      if (progress >= 1) {
+        colorIndexRef.current = nextColorIndex;
+        transitionStartTimeRef.current = null;
+      }
+    }
+    ctx.strokeStyle = strokeColor;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -252,7 +289,6 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
       <canvas
         ref={canvasRef}
         className="w-full h-full"
-        style={{ transition: 'color 1s ease' }}
       />
     </div>
   );
