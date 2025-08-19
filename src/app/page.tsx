@@ -4,13 +4,15 @@ export default function Home() {
     <div>
       <OscilloscopeVisualizer 
         timeWindow={0.35} 
+        gain={3.0}
         decay={1} 
         attack={0.0} 
-        lineThickness={5} 
+        lineThickness={6} 
         sparkleReactiveness={1.2} 
         sparkleVelocity={10} 
         sparkleColor="#FFFF00" 
         sparkleSize={3}
+        reverse={true}
       />
     </div>
   );

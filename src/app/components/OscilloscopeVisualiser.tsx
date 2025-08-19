@@ -30,6 +30,7 @@ interface OscilloscopeVisualizerProps {
   sparkleVelocity?: number;
   sparkleSpread?: number;
   timeWindow?: number;
+  reverse?: boolean;
 }
 
 const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
@@ -45,6 +46,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
   sparkleVelocity = 5,
   sparkleSpread = 20,
   timeWindow = 0.8,
+  reverse = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -267,7 +269,7 @@ const OscilloscopeVisualizer: React.FC<OscilloscopeVisualizerProps> = ({
       const amplitude = rawSample * currentSmoothedMagnitude * gain;
       // const amplitude = rawSample * gain;
       const y = centerY - amplitude * (canvas.height / 2);
-      const x = i * sliceWidth;
+      const x = reverse ? (dataArray.length - 1 - i) * sliceWidth : i * sliceWidth;
 
       if (i === 0) {
         ctx.moveTo(x, y);
